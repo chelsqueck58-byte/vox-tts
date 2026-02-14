@@ -1703,6 +1703,8 @@ function startSpeech(fromCharIndex) {
   speakCurrentChunk();
 }
 
+let seekTarget = null; // when non-null, onend redirects here instead of advancing
+
 function speakCurrentChunk() {
   if (isStopping || currentChunkIndex >= chunks.length) {
     lastCharIndex = 0;
@@ -1740,12 +1742,26 @@ function speakCurrentChunk() {
   };
 
   currentUtterance.onend = () => {
+    if (seekTarget !== null) {
+      // Seek redirect — start from the target position
+      const target = seekTarget;
+      seekTarget = null;
+      startSpeech(target);
+      return;
+    }
     if (isStopping) return;
     currentChunkIndex++;
     speakCurrentChunk();
   };
 
   currentUtterance.onerror = (e) => {
+    if (seekTarget !== null) {
+      // Seek redirect — same as onend
+      const target = seekTarget;
+      seekTarget = null;
+      startSpeech(target);
+      return;
+    }
     if (e.error === 'canceled' || isStopping) return;
     saveMeta();
     stopSpeechUI();
@@ -1991,18 +2007,23 @@ function jumpToPosition(charIndex) {
     showTextReader();
   }
 
-  if (isSpeaking) {
-    // Stop without resetting position, then restart from target
-    isStopping = true;
+  if (isSpeaking && !isPaused) {
+    // Set target, cancel current utterance — onend/onerror will pick up seekTarget
+    seekTarget = charIndex;
     synth.cancel();
-    stopSpeechUI();
+  } else if (isSpeaking && isPaused) {
+    // Paused — resume into new position
+    seekTarget = null;
+    synth.cancel();
     lastCharIndex = charIndex;
     saveMeta();
-    setTimeout(() => startSpeech(charIndex), 100);
+    isSpeaking = false;
+    isPaused = false;
+    startSpeech(charIndex);
   } else {
+    // Not playing — just update position
     lastCharIndex = charIndex;
     saveMeta();
-    // Just update the highlight and progress
     highlightWordAtChar(charIndex);
     const pct = Math.round((charIndex / fullText.length) * 100);
     progressFill.style.width = pct + '%';
