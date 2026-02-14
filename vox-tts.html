@@ -1986,18 +1986,22 @@ function highlightWordAtChar(charIndex) {
 }
 
 function jumpToPosition(charIndex) {
-  lastCharIndex = charIndex;
-  saveMeta();
-
   // Show reader if not visible
   if (!textReader.classList.contains('active')) {
     showTextReader();
   }
 
   if (isSpeaking) {
-    stopSpeech();
+    // Stop without resetting position, then restart from target
+    isStopping = true;
+    synth.cancel();
+    stopSpeechUI();
+    lastCharIndex = charIndex;
+    saveMeta();
     setTimeout(() => startSpeech(charIndex), 100);
   } else {
+    lastCharIndex = charIndex;
+    saveMeta();
     // Just update the highlight and progress
     highlightWordAtChar(charIndex);
     const pct = Math.round((charIndex / fullText.length) * 100);
@@ -2198,7 +2202,10 @@ window.dismissResume = () => {
   document.getElementById('resumeBanner').style.display = 'none';
   lastCharIndex = 0;
   progressFill.style.width = '0%';
+  progressThumb.style.left = '0%';
+  progressPct.textContent = '0%';
   progressSection.classList.remove('active');
+  hideTextReader();
   saveMeta();
 };
 
